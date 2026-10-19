@@ -1,0 +1,47 @@
+{
+  "name": "wayfinder-starmap",
+  "version": "1.0.0",
+  "description": "/maps: your wayfinder maps (GitHub or Forgejo issues) as an interactive star map in a pane -- frontier, claims, blockers, fog and lint; drag, zoom, click a star to read its ticket",
+  "author": {
+    "name": "wayfinder-starmap"
+  },
+  "license": "MIT",
+  "keywords": [
+    "wayfinder",
+    "issues",
+    "map",
+    "star map",
+    "planning"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "repo": {
+      "type": "string",
+      "title": "Repository",
+      "description": "The owner/repo whose issues hold your wayfinder maps (issues labelled wayfinder:map)",
+      "default": ""
+    },
+    "source": {
+      "type": "string",
+      "title": "Tracker",
+      "description": "github: read through the gh CLI. forgejo: read through Forge-Tools' hub-api",
+      "options": [
+        "github",
+        "forgejo"
+      ],
+      "default": "github"
+    },
+    "ghCommand": {
+      "type": "string",
+      "title": "gh command",
+      "description": "The GitHub CLI to run, signed in with `gh auth login`",
+      "default": "gh"
+    },
+    "hubApiCommand": {
+      "type": "string",
+      "title": "hub-api command",
+      "description": "Forge-Tools' hub-api, for a Forgejo tracker",
+      "default": "hub-api"
+    }
+  }
+}

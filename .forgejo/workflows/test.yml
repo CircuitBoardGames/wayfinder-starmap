@@ -1,0 +1,23 @@
+name: Test
+
+# The plugin's gate: the manifest, marketplace and hooks module validated, then every *.test.ts run against
+# Claude Code's own engine (`claude plugin test`). Required by branch protection as `Test /*`.
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plugin:
+    name: plugin
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate
+        run: claude plugin validate .
+      - name: Test
+        run: claude plugin test .

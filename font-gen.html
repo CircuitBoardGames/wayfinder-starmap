@@ -1,0 +1,26 @@
+<!doctype html><meta charset="utf-8"><body><script>
+// Reads ASCII 32..126 of "Replace The Sun" (a pixel font: at 16px every pixel is on or off) one pixel per
+// font pixel: each glyph's advance, and its pixels in a cell from OX left of its origin, the line's top row
+// first. The font file sits beside this page (ReplaceTheSun.ttf, from dafont.com/replacethesun.font).
+const PX = 16, CW = 16, CH = 20, OX = 3, BASE = 14
+new FontFace('RTS', 'url(ReplaceTheSun.ttf)').load().then(f => {
+  document.fonts.add(f)
+  const c = document.createElement('canvas'), x = c.getContext('2d')
+  c.width = CW; c.height = CH; x.font = `${PX}px RTS`; x.textBaseline = 'alphabetic'
+  const adv = [], cells = []
+  let top = CH, bottom = -1, right = 0
+  for (let code = 32; code <= 126; code++) {
+    const ch = String.fromCharCode(code)
+    adv.push(Math.round(x.measureText(ch).width))
+    x.clearRect(0, 0, CW, CH); x.fillStyle = '#fff'; x.fillText(ch, OX, BASE)
+    const d = x.getImageData(0, 0, CW, CH).data, on = []
+    for (let i = 0; i < CW * CH; i++) {
+      const a = d[i * 4 + 3]
+      if (a > 0 && a < 255) throw new Error(`partial pixel in ${ch}`)
+      if (a === 255) { on.push(i); top = Math.min(top, Math.floor(i / CW)); bottom = Math.max(bottom, Math.floor(i / CW)); right = Math.max(right, i % CW) }
+    }
+    cells.push(on)
+  }
+  document.body.textContent = JSON.stringify({ adv, cells, CW, CH, OX, BASE, top, bottom, right })
+}).catch(e => { document.body.textContent = 'ERROR ' + e })
+</script>

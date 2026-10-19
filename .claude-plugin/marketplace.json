@@ -1,0 +1,14 @@
+{
+  "name": "wayfinder-starmap",
+  "description": "An interactive star map of your wayfinder maps for Claude Code",
+  "owner": {
+    "name": "wayfinder-starmap"
+  },
+  "plugins": [
+    {
+      "name": "wayfinder-starmap",
+      "source": "./",
+      "description": "Your wayfinder maps as an interactive star map in a Claude Code pane"
+    }
+  ]
+}
