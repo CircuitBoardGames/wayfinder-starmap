@@ -9,6 +9,8 @@ star, every blocking link a lane, open questions as fog. `/maps` opens it beside
   closed blockers stay as faint dots so the lanes still connect.
 - **Move around it.** Drag to pan, wheel or `+` `-` to zoom, `f` to fit, `Tab` to walk the frontier.
 - **Open a ticket.** Click a star (or `Enter` on the selected one) to read its body under the map.
+- **Hand a ticket to your session.** **Assign** on an open ticket's row, or on a ticket opened from a star, sends
+  `Work on issue <owner/repo>#<n>: <title>` to the session the pane is in, as your own prompt.
 - **See what is wrong with the map.** Counts, the tickets by rank, fog patches and lint are listed under the
   picture: closed tickets the map does not index, blockers that are not on it, cycles, a missing destination.
 
@@ -39,6 +41,7 @@ Answer `y` to add the marketplace, then pick a scope. The install asks for the s
 | `source` | `github` | `github` reads through `gh`; `forgejo` reads through `hub-api`. |
 | `ghCommand` | `gh` | The GitHub CLI to run. |
 | `hubApiCommand` | `hub-api` | Forge-Tools' `hub-api`, for a Forgejo tracker. |
+| `fontFile` | *(none)* | A font for the labels: a JSON file made by `font-gen.html` (below). Empty: Replace The Sun. |
 
 Change them in `/config`, or in `settings.json`, under the installed plugin's id:
 
@@ -51,6 +54,14 @@ Change them in `/config`, or in `settings.json`, under the installed plugin's id
 ```
 
 The plugin holds no token: every read is `gh` or `hub-api`, with whatever credentials those already have.
+
+### A label font of your own
+
+The labels are drawn pixel by pixel from a font kept as pixels, so any font is first turned into one. Open
+`font-gen.html` in a browser, pick a `.ttf`, `.otf`, `.woff` or `.woff2` and a size (6 to 24 px), then **Save**.
+Set `fontFile` to the saved file's path (`~/` works) and run `/maps` again. A pixel font at its own size comes
+out exact; any other font is its shape at that size, so pick the size where it reads best. A file that is not
+a font keeps Replace The Sun, and the pane says why.
 
 ## Use
 

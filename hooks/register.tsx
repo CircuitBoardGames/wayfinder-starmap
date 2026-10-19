@@ -5,6 +5,7 @@ import type { MapGraph, MapItem, MapNode, MapRow, MapsSnapshot, Star, StarProps 
 import { fit, hit, layout, raster, signature, wrap, zoomAt } from './raster'
 import type { Cam, Layout, Shape, View } from './raster'
 import { listMaps, readGraph, readTicket, sourceOf, unset } from './source'
+import { fontFrom, fontId, useFont } from './font'
 
 const PANE = 'wayfinder-starmap'
 // A ticket row pressed in the maps pane opens its body here, beside it.
@@ -111,7 +112,7 @@ function shapeOf(g: MapGraph): Shape {
 }
 // The layout is laid once per graph (it is the slow part) and kept until the graph changes.
 function layoutOf(g: MapGraph): { sig: string; shape: Shape; layout: Layout } {
-  const s = shapeOf(g), sig = signature(s)
+  const s = shapeOf(g), sig = `${signature(s)}|${fontId()}`   // the font too: a shared picture in another is redrawn
   if (shape === null || shape.sig !== sig) { shape = { sig, shape: s, layout: layout(s) }; view = null }
   return shape
 }
@@ -312,9 +313,22 @@ async function refresh($: EngineInterface, want?: number) {
   if (mine !== asked) return
   const snap: MapsSnapshot = {
     at: await $.clock.now(), maps: found.maps, chosen, graph: got.graph,
-    errors: [found.error, got.error].filter((x): x is string => x !== null),
+    errors: [found.error, got.error, fontError].filter((x): x is string => x !== null),
   }
   await update($, snapshot, () => snap)
+}
+
+// The `fontFile` option: a font font-gen.html saved, read as /maps opens (so an edited file is picked up then).
+// One that cannot be read or is not a font keeps the built-in font, and the pane says why.
+let fontError: string | null = null
+async function loadFont($: EngineInterface, path: string) {
+  fontError = null
+  if (path === '') { useFont(null); return }
+  const full = path.startsWith('~/') ? `${(await $.env.get('HOME')) ?? ''}${path.slice(1)}` : path
+  let f: ReturnType<typeof fontFrom>
+  try { f = fontFrom(await $.fs.read(full)) } catch (err) { f = (err as Error).message }
+  useFont(typeof f === 'string' ? null : f)
+  if (typeof f === 'string') fontError = `fontFile ${full}: ${f} -- the labels use the built-in font`
 }
 
 async function refreshIfOpen($: EngineInterface) {
@@ -335,14 +349,23 @@ async function openItem($: EngineInterface, node: MapNode) {
     shown = {
       label, title: row.title || node.title, url: row.url || node.url,
       body: body.length > BODY_CHARS ? `${body.slice(0, BODY_CHARS)}\n\n*(cut at ${BODY_CHARS} characters; the rest is at the link)*` : body,
-      error: null,
+      error: null, node,
     }
   } catch (err) {
-    shown = { label, title: node.title, url: node.url, body: '', error: `${label}: ${(err as Error).message}` }
+    shown = { label, title: node.title, url: node.url, body: '', error: `${label}: ${(err as Error).message}`, node }
   }
   // Shown under the star map, one at a time, not in a pane of its own.
   await update($, item, () => shown)
 }
+
+// [Assign] hands an open ticket to the session this pane is drawn in, as the person's own prompt: it
+// runs as a turn of its own once the session is idle.
+async function assign($: EngineInterface, node: MapNode) {
+  const repo = /\/([^/]+\/[^/]+)\/issues\/\d+$/.exec(node.url)?.[1] ?? src.repo
+  await $.prompt.submit({ text: `Work on issue ${repo}#${node.num}: ${node.title}`, asUser: true })
+  $.ui.toast(`#${node.num} assigned to this session`)
+}
+const ASSIGN_COLS = '[ Assign ]'.length + 1
 
 function CloseRow($: EngineInterface, ui: ReturnType<EngineInterface['ui']['resolve']>, id: string) {
   const { Box, Button } = ui
@@ -382,6 +405,7 @@ const isView = (v: unknown): v is View => {
 
 export const register: Register = (on, options) => {
   src = sourceOf(options)
+  const fontFile = typeof options.fontFile === 'string' ? options.fontFile.trim() : ''
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'maps', description: 'Open the maps pane: the open wayfinder maps, each as its star map, frontier, claims, blockers, fog and lint' })
     $.clock.every(REFRESH_MS, () => {
@@ -400,6 +424,7 @@ export const register: Register = (on, options) => {
     const pixels = await wantPixels($)
     await update($, star, () => ({ pixels, note: '' }))
     ttyCell = await readTtyCell($)
+    await loadFont($, fontFile)
     const home = await $.env.get('HOME')
     sharedDir = (await $.env.get('SSH_CONNECTION')) || !home ? null : `${home}/.cache/wayfinder-starmap`
     const want = /^\s*#?(\d+)\s*$/.exec(e.args ?? '')
@@ -551,6 +576,7 @@ export const register: Register = (on, options) => {
                 <Box>
                   <Text bold wrap="wrap">{shown.label} {shown.title}</Text>
                   <Box flexGrow={1} />
+                  {isOpen(shown.node) && <Button key="assign:item" label="Assign" onPress={() => assign($, shown.node)} />}
                   <Button key="close:item" label=" ✕ " onPress={() => update($, item, () => null)} />
                 </Box>
                 {/* The URL alone on its row: a terminal's Ctrl/Cmd+click reads a link out of the row's text, and a
@@ -565,12 +591,20 @@ export const register: Register = (on, options) => {
             )}
             <Text dimColor>{fitText(LEGEND, cols)}</Text>
             {nodes.map(n => (
-              <Button key={`open:${n.num}`} plain onPress={() => openItem($, n)}>
-                <Text dimColor={n.status === 'resolved' || n.status === 'out_of_scope'}
-                      color={n.status === 'frontier' ? 'warning' : n.status === 'claimed' ? 'success' : undefined}>
-                  {fitText(row(n, open), cols)}
-                </Text>
-              </Button>
+              <Box key={`row:${n.num}`}>
+                <Button key={`open:${n.num}`} plain onPress={() => openItem($, n)}>
+                  <Text dimColor={!isOpen(n)}
+                        color={n.status === 'frontier' ? 'warning' : n.status === 'claimed' ? 'success' : undefined}>
+                    {fitText(row(n, open), cols - (isOpen(n) ? ASSIGN_COLS : 0))}
+                  </Text>
+                </Button>
+                <Box flexGrow={1} />
+                {isOpen(n) && (
+                  <Box flexShrink={0}>
+                    <Button key={`assign:${n.num}`} label="Assign" onPress={() => assign($, n)} />
+                  </Box>
+                )}
+              </Box>
             ))}
             <Text bold>Fog: {g.fog.length} patch{g.fog.length === 1 ? '' : 'es'}</Text>
             {g.fog.map((f, i) => (

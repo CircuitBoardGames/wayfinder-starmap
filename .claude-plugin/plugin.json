@@ -1,7 +1,7 @@
 {
   "name": "wayfinder-starmap",
-  "version": "1.0.0",
-  "description": "/maps: your wayfinder maps (GitHub or Forgejo issues) as an interactive star map in a pane -- frontier, claims, blockers, fog and lint; drag, zoom, click a star to read its ticket",
+  "version": "1.2.0",
+  "description": "/maps: your wayfinder maps (GitHub or Forgejo issues) as an interactive star map in a pane -- frontier, claims, blockers, fog and lint; drag, zoom, click a star to read its ticket, Assign one to your session",
   "author": {
     "name": "wayfinder-starmap"
   },
@@ -36,6 +36,12 @@
       "title": "gh command",
       "description": "The GitHub CLI to run, signed in with `gh auth login`",
       "default": "gh"
+    },
+    "fontFile": {
+      "type": "string",
+      "title": "Label font file",
+      "description": "A font for the star map's labels: the JSON file font-gen.html saves (any font, read as pixels). Empty: the built-in Replace The Sun",
+      "default": ""
     },
     "hubApiCommand": {
       "type": "string",

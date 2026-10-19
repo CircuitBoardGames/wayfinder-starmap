@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { textWidth } from '../hooks/font'
+import { fontFrom, textWidth, useFont } from '../hooks/font'
 import { fit, glyphsSampled, layout, raster, wrap } from '../hooks/raster'
 import type { Shape } from '../hooks/raster'
 
@@ -21,6 +21,30 @@ test('a label keeps growing with zoom past 16x, as its star does', async () => {
   expect(labelPixels('Image budgets', 36) / labelPixels('Image budgets', 16)).toBeGreaterThan(1.5)
 })
 
+
+// The `fontFile` option's font: one of solid blocks lights far more label pixels than the built-in, and
+// putting the built-in back draws exactly what it drew (a glyph kept from one font is never drawn for another).
+const BLOCKS = JSON.stringify({ h: 13, left: 0, adv: Array(95).fill(8), rows: Array.from({ length: 95 }, () => Array(13).fill(0x7f)) })
+test('a font file is the font labels draw in; the built-in comes back exactly', async () => {
+  const builtin = labelPixels('Image budgets', 4)
+  const f = fontFrom(BLOCKS)
+  if (typeof f === 'string') throw new Error(f)
+  useFont(f)
+  try { expect(labelPixels('Image budgets', 4)).toBeGreaterThan(builtin * 1.5) } finally { useFont(null) }
+  expect(labelPixels('Image budgets', 4)).toBe(builtin)
+})
+
+test('a file that is not a font is refused with the reason, never drawn from', async () => {
+  const font = JSON.parse(BLOCKS) as { h: number; left: number; adv: number[]; rows: number[][] }
+  expect(fontFrom('{')).toBe('not JSON')
+  expect(fontFrom('[]')).toMatch(/"h"/)
+  expect(fontFrom(JSON.stringify({ ...font, h: 0 }))).toMatch(/"h"/)
+  expect(fontFrom(JSON.stringify({ ...font, left: 31 }))).toMatch(/"left"/)
+  expect(fontFrom(JSON.stringify({ ...font, adv: font.adv.slice(1) }))).toMatch(/"adv"/)
+  expect(fontFrom(JSON.stringify({ ...font, rows: [...font.rows.slice(1), [1, 2]] }))).toMatch(/"rows"/)
+  expect(fontFrom(JSON.stringify({ ...font, rows: [...font.rows.slice(1), Array(13).fill(2 ** 31)] }))).toMatch(/"rows"/)
+  expect(typeof fontFrom(BLOCKS)).toBe('object')
+})
 
 //
 const SKY = 0x070a12, FOG = 0x8c70d8

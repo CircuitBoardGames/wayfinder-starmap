@@ -4,8 +4,10 @@
 // Each glyph: FONT_H rows from the line's top (10 above the baseline, 3 below), bit c of a row the font pixel
 // c - FONT_LEFT right of the glyph's origin; ADV its advance. ASCII 32..126; anything else draws as '?'.
 // Regenerate: font-gen.html beside ReplaceTheSun.ttf, then
-// chromium --headless --allow-file-access-from-files --virtual-time-budget=5000 --dump-dom file://$PWD/font-gen.html
-export const FONT_H = 13, FONT_LEFT = 1
+// chromium --headless --allow-file-access-from-files --virtual-time-budget=5000 --dump-dom 'file://'$PWD'/font-gen.html?font=ReplaceTheSun.ttf&px=16'
+// and its h, left, adv and rows are FONT_H, FONT_LEFT, ADV and ROWS below.
+// The `fontFile` option swaps in another font, a JSON file of the same four that font-gen.html saves.
+const FONT_H = 13, FONT_LEFT = 1
 const ADV = [5,3,7,8,8,7,8,3,5,5,8,7,4,8,3,7,8,7,8,8,8,8,8,8,8,8,3,3,7,8,7,8,8,8,8,8,8,8,8,8,8,5,8,8,8,8,8,8,8,8,8,8,9,8,8,8,8,9,8,5,7,5,7,8,4,8,8,8,8,8,8,8,8,5,7,8,5,8,8,8,8,8,8,8,8,8,8,8,8,8,8,6,3,6,9]
 const ROWS = [
   [0,0,0,0,0,0,0,0,0,0,0,0,0],
@@ -104,9 +106,40 @@ const ROWS = [
   [14,24,24,24,48,24,24,24,24,14,0,0,0],
   [0,0,0,412,438,230,0,0,0,0,0,0,0]
 ]
+// A font: `h` rows a glyph, bit c of a row the pixel c - `left` right of the origin, `adv` each advance, for
+// ASCII 32..126; `id` names it, so a picture drawn in one font is never taken for one drawn in another.
+export type Font = { h: number; left: number; adv: number[]; rows: number[][]; id: string }
+const BUILTIN: Font = { h: FONT_H, left: FONT_LEFT, adv: ADV, rows: ROWS, id: 'builtin' }
+let font = BUILTIN
+export const fontH = () => font.h
+export const fontLeft = () => font.left
+export const fontId = () => font.id
+// The font labels draw in from now on; null is the built-in one.
+export function useFont(f: Font | null) { font = f ?? BUILTIN }
+
+// A font file's text as a Font, or why it is not one. The file is the person's, so every number is checked:
+// a glyph wider than 31 pixels would not fit a row's bits, and a short table would draw undefined.
+export function fontFrom(text: string): Font | string {
+  let v: { h?: unknown; left?: unknown; adv?: unknown; rows?: unknown }
+  try { v = JSON.parse(text) as typeof v } catch { return 'not JSON' }
+  const int = (x: unknown, lo: number, hi: number): x is number => Number.isInteger(x) && (x as number) >= lo && (x as number) <= hi
+  if (v === null || typeof v !== 'object') return 'not a JSON object'
+  if (!int(v.h, 1, 64)) return '"h" is not a whole number of rows from 1 to 64'
+  if (!int(v.left, 0, 30)) return '"left" is not a whole number from 0 to 30'
+  const h = v.h
+  if (!Array.isArray(v.adv) || v.adv.length !== 95 || !v.adv.every(a => int(a, 0, 31))) return '"adv" is not 95 advances from 0 to 31'
+  if (!Array.isArray(v.rows) || v.rows.length !== 95
+      || !v.rows.every(r => Array.isArray(r) && r.length === h && r.every(b => int(b, 0, 0x7fffffff)))) {
+    return `"rows" is not 95 glyphs of ${h} rows, each a 31-bit number`
+  }
+  let hash = 5381
+  for (let i = 0; i < text.length; i++) hash = (hash * 33 + text.charCodeAt(i)) >>> 0
+  return { h, left: v.left, adv: v.adv as number[], rows: v.rows as number[][], id: `file-${hash.toString(36)}` }
+}
+
 const at = (code: number) => (code >= 32 && code <= 126 ? code - 32 : 31)
 // A glyph's advance, in font pixels.
-export const advance = (code: number) => ADV[at(code)]!
+export const advance = (code: number) => font.adv[at(code)]!
 // A line of text's width, in font pixels.
 export function textWidth(s: string): number {
   let w = 0
@@ -115,6 +148,6 @@ export function textWidth(s: string): number {
 }
 // Whether font pixel (u, v) of `code` is lit: u right of its origin, v down from the line's top.
 export function lit(code: number, u: number, v: number): boolean {
-  const c = u + FONT_LEFT
-  return v >= 0 && v < FONT_H && c >= 0 && c < 31 && ((ROWS[at(code)]![v]! >> c) & 1) === 1
+  const c = u + font.left
+  return v >= 0 && v < font.h && c >= 0 && c < 31 && ((font.rows[at(code)]![v]! >> c) & 1) === 1
 }

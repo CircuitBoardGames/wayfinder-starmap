@@ -18,7 +18,7 @@ export type MapRow = { number: number; title: string }
 // `loading`: `chosen` was just picked and its graph is on its way.
 export type MapsSnapshot = { at: number; maps: MapRow[]; chosen: number | null; graph: MapGraph | null; errors: string[]; loading?: boolean }
 // The ticket a pressed row opened in the item pane.
-export type MapItem = { label: string; title: string; url: string; body: string; error: string | null }
+export type MapItem = { label: string; title: string; url: string; body: string; error: string | null; node: MapNode }
 
 declare module 'claude-code' {
   interface PluginState {

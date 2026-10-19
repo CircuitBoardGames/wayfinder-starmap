@@ -3,7 +3,7 @@
 // functions over the graph's shape; the hooks module calls them, the Client overlay reuses the layout
 // for hit-testing. Pixel space: world x,y scaled by cam.s and offset by cam.x, cam.y; no aspect fudge,
 // pixels are square.
-import { advance, FONT_H, FONT_LEFT, lit, textWidth } from './font'
+import { advance, fontH, fontId, fontLeft, lit, textWidth } from './font'
 
 export type Pt = { x: number; y: number }
 export type Cam = { x: number; y: number; s: number }
@@ -286,11 +286,11 @@ let sampled = 0
 // How many glyph masks have been drawn from the font so far (for the test that a redraw reuses them).
 export const glyphsSampled = () => sampled
 function glyph(code: number, pf: number): { w: number; h: number; ox: number; a: Float32Array } {
-  const key = `${code}:${pf}`, hit = glyphs.get(key)
+  const key = `${fontId()}:${code}:${pf}`, hit = glyphs.get(key)
   if (hit !== undefined) return hit
   sampled++
-  const n = 4, ox = Math.ceil(FONT_LEFT * pf)
-  const w = Math.ceil((FONT_LEFT + advance(code) + 1) * pf) + 1, mh = Math.ceil(FONT_H * pf) + 1, a = new Float32Array(w * mh)
+  const n = 4, ox = Math.ceil(fontLeft() * pf)
+  const w = Math.ceil((fontLeft() + advance(code) + 1) * pf) + 1, mh = Math.ceil(fontH() * pf) + 1, a = new Float32Array(w * mh)
   for (let py = 0; py < mh; py++) for (let px = 0; px < w; px++) {
     let v = 0
     for (let sy = 0; sy < n; sy++) for (let sx = 0; sx < n; sx++)
@@ -341,9 +341,9 @@ export function raster(p: Shape, l: Layout, view: View, W: number, H: number, fi
   // cell and with the zoom as a star does (`rz`, its radius over 3 px, to 8x), so a lane keeps its weight beside
   // its stars zoomed in -- but only to LANE_ZOOM, short of the stars' limit; its dashes and arrowhead with it.
   const rz = Math.max(2, Math.min(24, 3 * z)) / 3, lz = Math.min(LANE_ZOOM, rz)
-  const lw = Math.max(1.25, 1.5 * scale * lz), dash = Math.max(1, scale * lz), pf = Math.max(1, Math.round(TEXT_H * scale * Math.min(TEXT_ZOOM, Math.max(1, z) ** 0.75) / FONT_H * 8) / 8)
+  const lw = Math.max(1.25, 1.5 * scale * lz), dash = Math.max(1, scale * lz), pf = Math.max(1, Math.round(TEXT_H * scale * Math.min(TEXT_ZOOM, Math.max(1, z) ** 0.75) / fontH() * 8) / 8)
   // A label's line: the font's rows and one between lines; its width, glyph by glyph.
-  const th = (FONT_H + 1) * pf, tw = (s: string) => textWidth(s) * pf
+  const th = (fontH() + 1) * pf, tw = (s: string) => textWidth(s) * pf
   const X = (q: Pt) => q.x * cam.s + cam.x, Y = (q: Pt) => q.y * cam.s + cam.y
   cv.fill(SKY)
   // The sky: a sparse parallax starfield behind everything (draw.js initStars, one layer). The draw that set a

@@ -158,6 +158,35 @@ test('pressing a ticket row shows its body under the star map, one at a time; âœ
   expect(ran.opened).toEqual(['wayfinder-starmap'])                    // no second pane
 })
 
+test('Assign on an open ticket row submits it to this session as the person\'s prompt; a closed one has none', FORGEJO, async ($, on) => {
+  box(on)
+  const submitted: { text: string; asUser?: boolean }[] = []
+  on('prompt.submit', ($, e) => { submitted.push({ text: e.text, asUser: (e.origin as { asUser?: boolean }).asUser }); return { text: e.text } })
+  await open($)
+  const ui = await $.ui.mount({ plugin: 'wayfinder-starmap', surface: 'terminal', component: 'Pane', requestId: 'wayfinder-starmap', props: PANE_PROPS })
+  await ui.press({ key: 'assign:5' })                                   // no URL on the node: the configured repo
+  expect(submitted).toEqual([{ text: 'Work on issue acme/maps#5: takeable', asUser: true }])
+  expect(await ui.find({ key: 'assign:1' })).toBeUndefined()           // resolved
+  expect(await ui.find({ key: 'assign:2' })).toBeUndefined()           // out of scope
+  expect(await ui.find({ key: 'assign:4' })).toBeDefined()             // blocked, still open
+  await ui.unmount()
+})
+
+test('a ticket opened by clicking a star has Assign beside its âœ• while open; a closed one has none', FORGEJO, async ($, on) => {
+  box(on)
+  const submitted: string[] = []
+  on('prompt.submit', ($, e) => { submitted.push(e.text); return { text: e.text } })
+  await open($)
+  const ui = await starmap($)
+  await ui.post({ open: 5 }, { in: 'starmap' })
+  await ui.press({ key: 'assign:item' })
+  expect(submitted).toEqual(['Work on issue acme/maps#5: takeable'])
+  await ui.post({ open: 1 }, { in: 'starmap' })                         // resolved
+  expect(await ui.find({ type: 'Text', text: /#1 / })).toBeDefined()
+  expect(await ui.find({ key: 'assign:item' })).toBeUndefined()
+  await ui.unmount()
+})
+
 test('a refusing graph verb shows its reason, not an empty map', FORGEJO, async ($, on) => {
   box(on, 2)
   await open($)
@@ -437,6 +466,35 @@ test('at the zoom cap a tick over the star map neither scrolls the pane nor redr
 const CMUX = { HOME: '/home/u', TERM: 'xterm-256color', CMUX_TUI_TERMINAL_ID: 'term_abc', CLAUDE_CODE_FORCE_TERMINAL_IMAGES: '1' }
 const SHARED = { rgba: '/home/u/.cache/wayfinder-starmap/map-4-v3.rgb', meta: '/home/u/.cache/wayfinder-starmap/map-4-v3.json' }
 type FileSource = { file: string; format: string; width: number; height: number; generation: number }
+
+// The `fontFile` option: read as /maps opens, and part of the shared picture's signature, so a picture drawn in
+// another font is redrawn rather than adopted. One that is not a font keeps the built-in and the pane says so.
+const BLOCKS = JSON.stringify({ h: 13, left: 0, adv: Array(95).fill(8), rows: Array.from({ length: 95 }, () => Array(13).fill(0x7f)) })
+const sigOf = (ran: ReturnType<typeof box>) => (JSON.parse(ran.files.get(SHARED.meta)!) as { sig: string }).sig
+test('with no fontFile the shared picture is signed with the built-in font', FORGEJO, async ($, on) => {
+  const ran = box(on, 0, CMUX)
+  await open($)
+  const ui = await starmap($)
+  expect(sigOf(ran)).toMatch(/\|builtin$/)
+  await ui.unmount()
+})
+test('a fontFile font is read from ~ and signs the shared picture with itself', { options: { ...FORGEJO.options, fontFile: '~/fonts/blocks.json' } }, async ($, on) => {
+  const ran = box(on, 0, CMUX)
+  ran.files.set('/home/u/fonts/blocks.json', BLOCKS)
+  await open($)
+  const ui = await starmap($)
+  expect(sigOf(ran)).toMatch(/\|file-[0-9a-z]+$/)
+  expect(await ui.find({ type: 'Text', text: /fontFile/ })).toBeUndefined()
+  await ui.unmount()
+})
+test('a fontFile that is not a font keeps the built-in, and the pane says why', { options: { ...FORGEJO.options, fontFile: '/nope.json' } }, async ($, on) => {
+  const ran = box(on, 0, CMUX)
+  await open($)
+  const ui = await starmap($)
+  expect(await ui.find({ type: 'Text', text: /fontFile \/nope\.json: not JSON -- the labels use the built-in font/ })).toBeDefined()
+  expect(sigOf(ran)).toMatch(/\|builtin$/)
+  await ui.unmount()
+})
 test('in a local pane the star map is one shared file: drawn once, adopted by another pane, redrawn by a drag here', FORGEJO, async ($, on) => {
   const clock = mock.clock(on, { now: Date.UTC(2026, 9, 12, 19, 30, 0) })   // the hooks module's poll runs on it
   const ran = box(on, 0, CMUX, GRAPH, undefined, false)

@@ -1,26 +1,67 @@
-<!doctype html><meta charset="utf-8"><body><script>
-// Reads ASCII 32..126 of "Replace The Sun" (a pixel font: at 16px every pixel is on or off) one pixel per
-// font pixel: each glyph's advance, and its pixels in a cell from OX left of its origin, the line's top row
-// first. The font file sits beside this page (ReplaceTheSun.ttf, from dafont.com/replacethesun.font).
-const PX = 16, CW = 16, CH = 20, OX = 3, BASE = 14
-new FontFace('RTS', 'url(ReplaceTheSun.ttf)').load().then(f => {
-  document.fonts.add(f)
-  const c = document.createElement('canvas'), x = c.getContext('2d')
-  c.width = CW; c.height = CH; x.font = `${PX}px RTS`; x.textBaseline = 'alphabetic'
-  const adv = [], cells = []
-  let top = CH, bottom = -1, right = 0
+<!doctype html><meta charset="utf-8"><title>Star map font</title><body>
+<!-- Turns a font into the star map's label font: ASCII 32..126 drawn at one size, each pixel on or off (a
+     pixel font at its own size is exact; any other font is its shape at that size, cut at half coverage),
+     saved as the JSON the plugin's `fontFile` option names: h rows a glyph, bit c of a row the pixel
+     c - left right of the origin, adv each advance.
+     In a browser: open this page, pick a font file and a size, then Save.
+     Headless: chromium --headless --allow-file-access-from-files --virtual-time-budget=5000 --dump-dom \
+       'file://'$PWD'/font-gen.html?font=Some.ttf&px=16'   (the font beside this page; the JSON is the body) -->
+<p><input type="file" id="file" accept=".ttf,.otf,.woff,.woff2">
+<label>size <input type="number" id="px" value="16" min="6" max="24"> px</label>
+<a id="save" download="starmap-font.json" hidden>Save</a></p>
+<pre id="out"></pre>
+<script>
+const out = document.getElementById('out'), save = document.getElementById('save')
+
+// The font's glyphs as the plugin's tables; throws when one is wider than a row's 31 bits.
+function tables(family, PX) {
+  const CW = PX * 3, CH = PX * 2, OX = PX, BASE = Math.round(PX * 1.4)
+  const c = document.createElement('canvas'), x = c.getContext('2d', { willReadFrequently: true })
+  c.width = CW; c.height = CH; x.font = `${PX}px "${family}"`; x.textBaseline = 'alphabetic'
+  const adv = [], lit = []
+  let top = CH, bottom = -1, minX = CW, maxX = -1
   for (let code = 32; code <= 126; code++) {
     const ch = String.fromCharCode(code)
     adv.push(Math.round(x.measureText(ch).width))
     x.clearRect(0, 0, CW, CH); x.fillStyle = '#fff'; x.fillText(ch, OX, BASE)
     const d = x.getImageData(0, 0, CW, CH).data, on = []
     for (let i = 0; i < CW * CH; i++) {
-      const a = d[i * 4 + 3]
-      if (a > 0 && a < 255) throw new Error(`partial pixel in ${ch}`)
-      if (a === 255) { on.push(i); top = Math.min(top, Math.floor(i / CW)); bottom = Math.max(bottom, Math.floor(i / CW)); right = Math.max(right, i % CW) }
+      if (d[i * 4 + 3] < 128) continue
+      const px = i % CW, py = Math.floor(i / CW)
+      on.push([px, py]); top = Math.min(top, py); bottom = Math.max(bottom, py); minX = Math.min(minX, px); maxX = Math.max(maxX, px)
     }
-    cells.push(on)
+    lit.push(on)
   }
-  document.body.textContent = JSON.stringify({ adv, cells, CW, CH, OX, BASE, top, bottom, right })
-}).catch(e => { document.body.textContent = 'ERROR ' + e })
+  if (bottom < 0) throw new Error('the font drew nothing')
+  if (maxX - minX > 30) throw new Error(`a glyph is ${maxX - minX + 1} pixels wide, more than 31: pick a smaller size`)
+  const h = bottom - top + 1, left = OX - minX
+  const rows = lit.map(on => { const r = new Array(h).fill(0); for (const [px, py] of on) r[py - top] |= 1 << (px - minX); return r })
+  return { h, left, adv: adv.map(a => Math.min(a, 31)), rows }
+}
+
+async function make(source, PX) {
+  const f = await new FontFace('StarmapFont', source).load()
+  document.fonts.add(f)
+  return JSON.stringify(tables('StarmapFont', PX))
+}
+
+const q = new URLSearchParams(location.search)
+if (q.has('font')) {
+  make(`url(${q.get('font')})`, Number(q.get('px') ?? 16))
+    .then(json => { document.body.textContent = json })
+    .catch(e => { document.body.textContent = 'ERROR ' + e.message })
+} else {
+  const run = async () => {
+    const file = document.getElementById('file').files[0]
+    if (!file) return
+    save.hidden = true
+    try {
+      const json = await make(await file.arrayBuffer(), Number(document.getElementById('px').value))
+      save.href = URL.createObjectURL(new Blob([json], { type: 'application/json' })); save.hidden = false
+      out.textContent = `${file.name}: ready. Save it, then set the plugin's fontFile option to the saved file's path.`
+    } catch (e) { out.textContent = 'ERROR ' + e.message }
+  }
+  document.getElementById('file').onchange = run
+  document.getElementById('px').onchange = run
+}
 </script>
